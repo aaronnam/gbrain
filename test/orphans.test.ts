@@ -130,6 +130,8 @@ describe('formatOrphansText', () => {
     return {
       orphans,
       total_orphans: orphans.length,
+      actionable_orphans: orphans.length,
+      source_like_orphans: 0,
       total_linkable: orphans.length + 50,
       total_pages: orphans.length + 60,
       excluded: 10,
@@ -140,7 +142,7 @@ describe('formatOrphansText', () => {
   test('shows summary line', () => {
     const result = makeResult([]);
     const out = formatOrphansText(result);
-    expect(out).toContain('0 orphans out of');
+    expect(out).toContain('0 total orphans = 0 actionable + 0 source-like out of');
     expect(out).toContain('total');
     expect(out).toContain('excluded');
   });
@@ -196,12 +198,14 @@ describe('formatOrphansText', () => {
     const result: OrphanResult = {
       orphans,
       total_orphans: 2,
+      actionable_orphans: 2,
+      source_like_orphans: 0,
       total_linkable: 100,
       total_pages: 120,
       excluded: 20,
     };
     const out = formatOrphansText(result);
-    expect(out).toContain('2 orphans out of 100 linkable pages (120 total; 20 excluded)');
+    expect(out).toContain('2 total orphans = 2 actionable + 0 source-like out of 100 linkable pages (120 total; 20 excluded)');
   });
 });
 

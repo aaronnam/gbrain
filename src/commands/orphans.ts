@@ -27,6 +27,8 @@ export interface OrphanPage {
 export interface OrphanResult {
   orphans: OrphanPage[];
   total_orphans: number;
+  actionable_orphans: number;
+  source_like_orphans: number;
   total_linkable: number;
   total_pages: number;
   excluded: number;
@@ -95,6 +97,11 @@ export function deriveDomain(frontmatterDomain: string | null | undefined, slug:
   return slug.split('/')[0] || 'root';
 }
 
+export function isSourceLikeOrphan(slug: string): boolean {
+  const firstSegment = slug.split('/')[0];
+  return slug.startsWith('98_meeting-transcripts/') || /^\d{4}$/.test(firstSegment);
+}
+
 // --- Core query ---
 
 /**
@@ -154,10 +161,14 @@ export async function findOrphans(
   }));
 
   const excluded = allOrphans.length - filtered.length;
+  const sourceLikeOrphans = orphans.filter(page => isSourceLikeOrphan(page.slug)).length;
+  const actionableOrphans = orphans.length - sourceLikeOrphans;
 
   return {
     orphans,
     total_orphans: orphans.length,
+    actionable_orphans: actionableOrphans,
+    source_like_orphans: sourceLikeOrphans,
     total_linkable: filtered.length + (total - allOrphans.length),
     total_pages: total,
     excluded,
@@ -169,9 +180,9 @@ export async function findOrphans(
 export function formatOrphansText(result: OrphanResult): string {
   const lines: string[] = [];
 
-  const { orphans, total_orphans, total_linkable, total_pages, excluded } = result;
+  const { orphans, total_orphans, actionable_orphans, source_like_orphans, total_linkable, total_pages, excluded } = result;
   lines.push(
-    `${total_orphans} orphans out of ${total_linkable} linkable pages (${total_pages} total; ${excluded} excluded)\n`,
+    `${total_orphans} total orphans = ${actionable_orphans} actionable + ${source_like_orphans} source-like out of ${total_linkable} linkable pages (${total_pages} total; ${excluded} excluded)\n`,
   );
 
   if (orphans.length === 0) {

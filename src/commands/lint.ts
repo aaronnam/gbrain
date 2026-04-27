@@ -58,11 +58,85 @@ const LLM_PREAMBLES = [
   /^Absolutely\.?\s*Here[^.\n]*\.?\s*\n*/gim,
 ];
 
+// ── Scope policy ───────────────────────────────────────────────────
+
+function normalizeLintPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/').toLowerCase();
+}
+
+function matchesAnyPathMarker(filePath: string, markers: string[]): boolean {
+  const normalized = normalizeLintPath(filePath);
+  return markers.some(marker => normalized.includes(marker));
+}
+
+function isTemplateOrSpecZone(filePath: string): boolean {
+  return matchesAnyPathMarker(filePath, [
+    '/templates/',
+    '/template/',
+    '-template.md',
+    ' template.md',
+    '/specs/',
+    '/system-spec.md',
+    '/system-readme.md',
+    '/landing page template/',
+  ]);
+}
+
+function isAgentDocZone(filePath: string): boolean {
+  return matchesAnyPathMarker(filePath, [
+    '/agent-blueprints/',
+    '/.agents/skills/',
+    '/meta-agent/',
+    'transcript-cleanup-prompt.md',
+  ]);
+}
+
+function shouldSuppressRule(filePath: string, rule: string): boolean {
+  if (isTemplateOrSpecZone(filePath) && ['placeholder-date', 'empty-section'].includes(rule)) {
+    return true;
+  }
+
+  if (isAgentDocZone(filePath) && ['placeholder-date', 'empty-section', 'missing-title', 'missing-type', 'missing-created', 'no-frontmatter'].includes(rule)) {
+    return true;
+  }
+
+  return false;
+}
+
+function classifyLintScope(filePath: string): 'core-note' | 'source-archive' | 'operational-doc' {
+  const normalized = normalizeLintPath(filePath);
+
+  if (
+    normalized.includes('/98_meeting-transcripts/') ||
+    normalized.includes('/999_archive/') ||
+    normalized.includes('/archive/') ||
+    /(^|\/)\d{4}(\/|$)/.test(normalized)
+  ) {
+    return 'source-archive';
+  }
+
+  if (
+    isTemplateOrSpecZone(filePath) ||
+    isAgentDocZone(filePath) ||
+    normalized.includes('/99_claude-code/') ||
+    normalized.includes('/99_claude code/')
+  ) {
+    return 'operational-doc';
+  }
+
+  return 'core-note';
+}
+
 // ── Rules ──────────────────────────────────────────────────────────
 
 export function lintContent(content: string, filePath: string): LintIssue[] {
   const issues: LintIssue[] = [];
   const lines = content.split('\n');
+  const pushIssue = (issue: LintIssue) => {
+    if (!shouldSuppressRule(filePath, issue.rule)) {
+      issues.push(issue);
+    }
+  };
 
   // ── Frontmatter validation (delegates to parseMarkdown(validate:true)) ──
   // This is the single source of truth for frontmatter shape rules. Each
@@ -87,7 +161,7 @@ export function lintContent(content: string, filePath: string): LintIssue[] {
   for (const pattern of LLM_PREAMBLES) {
     pattern.lastIndex = 0;
     if (pattern.test(content)) {
-      issues.push({
+      pushIssue({
         file: filePath, line: 1, rule: 'llm-preamble',
         message: 'LLM preamble artifact detected (e.g., "Of course! Here is...")',
         fixable: true,
@@ -95,9 +169,10 @@ export function lintContent(content: string, filePath: string): LintIssue[] {
     }
   }
 
-  // Rule: Wrapping code fences (```markdown ... ```)
-  if (content.match(/^```(?:markdown|md)\s*\n/m) && content.match(/\n```\s*$/m)) {
-    issues.push({
+  // Rule: Whole-page wrapping code fences (```markdown ... ```)
+  const trimmed = content.trim();
+  if (/^```(?:markdown|md)\s*\n[\s\S]*\n```$/.test(trimmed)) {
+    pushIssue({
       file: filePath, line: 1, rule: 'code-fence-wrap',
       message: 'Page wrapped in ```markdown code fences (LLM artifact)',
       fixable: true,
@@ -107,7 +182,7 @@ export function lintContent(content: string, filePath: string): LintIssue[] {
   // Rule: Placeholder dates
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].match(/\bYYYY-MM-DD\b/) || lines[i].match(/\bXX-XX\b/) || lines[i].match(/\b\d{4}-XX-XX\b/)) {
-      issues.push({
+      pushIssue({
         file: filePath, line: i + 1, rule: 'placeholder-date',
         message: `Placeholder date found: ${lines[i].trim().slice(0, 60)}`,
         fixable: false,
@@ -121,21 +196,21 @@ export function lintContent(content: string, filePath: string): LintIssue[] {
     if (fmEnd > 0) {
       const fm = content.slice(3, fmEnd);
       if (!fm.match(/^title:/m)) {
-        issues.push({
+        pushIssue({
           file: filePath, line: 1, rule: 'missing-title',
           message: 'Frontmatter missing required field: title',
           fixable: false,
         });
       }
       if (!fm.match(/^type:/m)) {
-        issues.push({
+        pushIssue({
           file: filePath, line: 1, rule: 'missing-type',
           message: 'Frontmatter missing required field: type',
           fixable: false,
         });
       }
       if (!fm.match(/^created:/m)) {
-        issues.push({
+        pushIssue({
           file: filePath, line: 1, rule: 'missing-created',
           message: 'Frontmatter missing required field: created',
           fixable: false,
@@ -144,7 +219,7 @@ export function lintContent(content: string, filePath: string): LintIssue[] {
     }
   } else {
     // No frontmatter at all
-    issues.push({
+    pushIssue({
       file: filePath, line: 1, rule: 'no-frontmatter',
       message: 'Page has no YAML frontmatter',
       fixable: false,
@@ -156,7 +231,7 @@ export function lintContent(content: string, filePath: string): LintIssue[] {
     const line = lines[i];
     // Open [Source: without closing ]
     if (line.match(/\[Source:[^\]]*$/) && !(i + 1 < lines.length && lines[i + 1].match(/^\s*[^\[]*\]/))) {
-      issues.push({
+      pushIssue({
         file: filePath, line: i + 1, rule: 'broken-citation',
         message: 'Unclosed [Source: ...] citation',
         fixable: false,
@@ -174,7 +249,7 @@ export function lintContent(content: string, filePath: string): LintIssue[] {
 
     if (sectionBody === '' || sectionBody === '[No data yet]' || sectionBody === '*[To be filled by agent]*') {
       const lineNum = content.slice(0, sectionMatch.index).split('\n').length;
-      issues.push({
+      pushIssue({
         file: filePath, line: lineNum, rule: 'empty-section',
         message: `Empty section: ## ${sectionMatch[1]}`,
         fixable: false,
@@ -195,9 +270,11 @@ export function fixContent(content: string): string {
     fixed = fixed.replace(pattern, '');
   }
 
-  // Fix wrapping code fences
-  fixed = fixed.replace(/^```(?:markdown|md)\s*\n/, '');
-  fixed = fixed.replace(/\n```\s*$/, '');
+  // Fix wrapping code fences only when they wrap the entire page
+  if (/^```(?:markdown|md)\s*\n[\s\S]*\n```$/.test(fixed.trim())) {
+    fixed = fixed.replace(/^```(?:markdown|md)\s*\n/, '');
+    fixed = fixed.replace(/\n```\s*$/, '');
+  }
 
   // Clean up excessive blank lines left by fixes
   fixed = fixed.replace(/\n{3,}/g, '\n\n');
@@ -210,7 +287,7 @@ function collectPages(dir: string): string[] {
   const pages: string[] = [];
   function walk(d: string) {
     for (const entry of readdirSync(d)) {
-      if (entry.startsWith('.') || entry.startsWith('_')) continue;
+      if (entry.startsWith('.') || entry.startsWith('_') || entry === 'node_modules') continue;
       const full = join(d, entry);
       if (lstatSync(full).isDirectory()) walk(full);
       else if (entry.endsWith('.md')) pages.push(full);
@@ -312,6 +389,7 @@ export async function runLint(args: string[]) {
   const { getCliOptions, cliOptsToProgressOptions } = await import('../core/cli-options.ts');
   const progress = createProgress(cliOptsToProgressOptions(getCliOptions()));
   progress.start('lint.pages', pages.length);
+  const scopeIssueCounts = new Map<string, number>();
 
   for (const page of pages) {
     const content = readFileSync(page, 'utf-8');
@@ -319,6 +397,9 @@ export async function runLint(args: string[]) {
     const issues = lintContent(content, relPath);
     progress.tick(1);
     if (issues.length === 0) continue;
+
+    const scope = classifyLintScope(relPath);
+    scopeIssueCounts.set(scope, (scopeIssueCounts.get(scope) || 0) + issues.length);
 
     console.log(`\n${relPath}:`);
     for (const issue of issues) {
@@ -344,6 +425,14 @@ export async function runLint(args: string[]) {
   // produces canonical numbers for the summary line).
   const result = await runLintCore({ target, fix: doFix, dryRun });
   console.log(`\n${result.pages_scanned} pages scanned. ${result.total_issues} issue(s) in ${result.pages_with_issues} page(s).`);
+  if (scopeIssueCounts.size > 0) {
+    const orderedScopes = ['core-note', 'source-archive', 'operational-doc'];
+    const scopeSummary = orderedScopes
+      .filter(scopeName => scopeIssueCounts.has(scopeName))
+      .map(scopeName => `${scopeName}=${scopeIssueCounts.get(scopeName)}`)
+      .join(', ');
+    console.log(`Scope split: ${scopeSummary}`);
+  }
   if (doFix) {
     console.log(`${dryRun ? '(dry run) ' : ''}${result.total_fixed} auto-fixed.`);
   } else if (result.total_issues > 0) {
