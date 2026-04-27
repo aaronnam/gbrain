@@ -153,6 +153,11 @@
       "name": "smoke-test",
       "path": "smoke-test/SKILL.md",
       "description": "Post-restart smoke tests + auto-fix for gbrain and OpenClaw environments"
+    },
+    {
+      "name": "local-patch-governance",
+      "path": "local-patch-governance/SKILL.md",
+      "description": "Manage Aaron's local GBrain customizations as durable branch commits; use when ~/gbrain is dirty or during upgrades with local patches."
     }
   ],
   "dependencies": {
