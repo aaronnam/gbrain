@@ -32,10 +32,22 @@ describe('lintContent', () => {
     expect(issues.some(i => i.rule === 'code-fence-wrap')).toBe(true);
   });
 
+  test('does not flag embedded markdown code blocks as whole-page wrappers', () => {
+    const content = '---\ntitle: Test\ntype: reference\ncreated: 2026-04-11\n---\n\n# Test\n\n```markdown\n## Example\n\nTemplate\n```\n';
+    const issues = lintContent(content, 'test.md');
+    expect(issues.some(i => i.rule === 'code-fence-wrap')).toBe(false);
+  });
+
   test('detects placeholder dates', () => {
     const content = '---\ntitle: Test\ntype: person\ncreated: YYYY-MM-DD\n---\n\n# Test';
     const issues = lintContent(content, 'test.md');
     expect(issues.some(i => i.rule === 'placeholder-date')).toBe(true);
+  });
+
+  test('suppresses placeholder-date in spec zones', () => {
+    const content = '---\ntitle: Spec\ntype: reference\ncreated: 2026-04-11\n---\n\n# YYYY-MM-DD | DayOfWeek';
+    const issues = lintContent(content, '00-Daily-planning/specs/DAILY-LOG-FORMAT-SPEC.md');
+    expect(issues.some(i => i.rule === 'placeholder-date')).toBe(false);
   });
 
   test('detects XX-XX placeholder dates', () => {
@@ -66,6 +78,20 @@ describe('lintContent', () => {
     const content = '---\ntitle: Test\ntype: person\ncreated: 2026-04-11\n---\n\n# Test\n\n## What They Believe\n\n[No data yet]\n\n## State\n\nReal content here.';
     const issues = lintContent(content, 'test.md');
     expect(issues.some(i => i.rule === 'empty-section' && i.message.includes('What They Believe'))).toBe(true);
+  });
+
+  test('suppresses empty sections in template zones', () => {
+    const content = '---\ntitle: Template\ntype: reference\ncreated: 2026-04-11\n---\n\n## Prompt\n\n[No data yet]';
+    const issues = lintContent(content, '01_Personal/Archive/Morning-Routine/Templates/Quiet-Time-Template.md');
+    expect(issues.some(i => i.rule === 'empty-section')).toBe(false);
+  });
+
+  test('suppresses brain-schema frontmatter rules in agent doc zones', () => {
+    const content = '---\nname: competitive-intel-analyst\ndescription: Agent doc\n---\n\n# Agent';
+    const issues = lintContent(content, '02_Work/AI-Development/Agent-Blueprints/competitive-intel-analyst.md');
+    expect(issues.some(i => i.rule === 'missing-title')).toBe(false);
+    expect(issues.some(i => i.rule === 'missing-type')).toBe(false);
+    expect(issues.some(i => i.rule === 'missing-created')).toBe(false);
   });
 
   test('detects agent placeholder sections', () => {
