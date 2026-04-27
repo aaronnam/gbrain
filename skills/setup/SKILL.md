@@ -61,14 +61,17 @@ Supabase gives you managed Postgres + pgvector (vector search built in) for $25/
 
 ## Available init options
 
+Current repo docs (`AGENTS.md`, `INSTALL_FOR_AGENTS.md`) say `gbrain init` defaults to PGLite: embedded Postgres via WASM, zero-config, no server needed. Supabase/Postgres is an optional scale/multi-device path, not mandatory.
+
+- `gbrain init` -- default PGLite brain at `~/.gbrain/brain.pglite` (zero-config)
 - `gbrain init --supabase` -- interactive wizard (prompts for connection string)
-- `gbrain init --url <connection_string>` -- direct, no prompts
+- `gbrain init --url <connection_string>` -- direct Postgres/Supabase, no prompts
 - `gbrain init --non-interactive --url <connection_string>` -- for scripts/agents
 - `gbrain doctor --json` -- health check after init
 
-There is no `--local`, `--sqlite`, or offline mode. GBrain requires Postgres + pgvector.
+Do not tell users that GBrain requires remote Postgres. Use current docs as source of truth: PGLite is the default; Postgres/Supabase is the recommended production scale or multi-device path.
 
-## Phase A: Supabase Setup (recommended)
+## Phase A: Supabase Setup (optional scale path)
 
 Guide the user through creating a Supabase project:
 

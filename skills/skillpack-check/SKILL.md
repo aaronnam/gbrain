@@ -82,6 +82,31 @@ a required subcommand crashed. Check:
 2. `gbrain --version` exits 0
 3. `~/.gbrain/` is accessible
 
+### Resolver warnings (`resolver_health: WARN`)
+
+When the user asks whether resolver warnings are correct, run the standalone resolver gate and inspect JSON rather than inferring from the human summary:
+
+```bash
+gbrain check-resolvable --skills-dir <path-to-gbrain>/skills --json > /tmp/gbrain-resolver-report.json
+python3 - <<'PY'
+import json
+r=json.load(open('/tmp/gbrain-resolver-report.json'))['report']
+print('summary', r['summary'])
+print('errors', len(r['errors']))
+for e in r['errors']: print('ERROR', e)
+print('warnings', len(r['warnings']))
+for w in r['warnings']: print('WARN', w)
+PY
+```
+
+Interpretation:
+- `ok: true` with `errors: []` means GBrain health is not failing; warnings are advisory unless `--strict` is used.
+- `routing_miss` warnings are often real under the current structural matcher: it normalizes text and requires a resolver trigger phrase to appear as a substring of the fixture intent.
+- Validate a warning by comparing the fixture in `skills/<skill>/routing-eval.jsonl` against the exact trigger row in `skills/RESOLVER.md`.
+- Prefer broadening `RESOLVER.md` triggers (for example, adding shorter quoted phrases like `"fix broken citations"` or `"who is"`) over weakening useful routing fixtures.
+- If the user asks about the LLM tie-break layer, verify with `gbrain routing-eval --skills-dir <path-to-gbrain>/skills --llm`. Current observed behavior: `--llm` is parsed but reserved/no-op; it prints `No model calls made.`
+- Treat README claims that `gbrain routing-eval --llm` runs an LLM tie-break as potentially stale. Cross-check `src/commands/routing-eval.ts` and `src/core/routing-eval.ts`; the code documents Layer B as reserved/not implemented and passes an unused `_opts` argument.
+
 ## Output format
 
 ```json

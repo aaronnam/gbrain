@@ -14,6 +14,8 @@ triggers:
   - "look up"
   - "background on"
   - "notes on"
+  - "notes on this person"
+  - "do we already have notes on"
   - "who knows who"
   - "relationship between"
   - "connections"
