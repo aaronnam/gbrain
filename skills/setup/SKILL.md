@@ -61,13 +61,15 @@ Supabase gives you managed Postgres + pgvector (vector search built in) for $25/
 
 ## Available init options
 
+Current repo docs (`AGENTS.md`, `INSTALL_FOR_AGENTS.md`) say `gbrain init` defaults to PGLite: embedded Postgres via WASM, zero-config, no server needed. Supabase/Postgres is an optional scale/multi-device path, not mandatory.
+
+- `gbrain init` -- default PGLite brain at `~/.gbrain/brain.pglite` (zero-config)
 - `gbrain init --supabase` -- interactive wizard (prompts for connection string)
-- `gbrain init --url <connection_string>` -- direct, no prompts
+- `gbrain init --url <connection_string>` -- direct Postgres/Supabase, no prompts
 - `gbrain init --non-interactive --url <connection_string>` -- for scripts/agents
 - `gbrain doctor --json` -- health check after init
 
-There is no `--local`, `--sqlite`, or offline mode. GBrain requires Postgres + pgvector
-(local PGLite or remote Supabase / self-hosted).
+There is no `--local`, `--sqlite`, or offline mode. GBrain requires Postgres-compatible storage + pgvector: default local PGLite, remote Supabase, or self-hosted Postgres. Do not tell users that GBrain requires remote Postgres; use current docs as source of truth.
 
 ## Phase A.5: Choose Topology (run BEFORE Phase A)
 
@@ -158,7 +160,7 @@ per-worktree code engines are configured per-worktree as gstack creates them.
 If the user has a remote artifact brain (Topology 2 + 3 combined), follow
 the thin-client setup above for the artifact brain instead of Phase A.
 
-## Phase A: Supabase Setup (recommended)
+## Phase A: Supabase Setup (optional scale path)
 
 Guide the user through creating a Supabase project:
 

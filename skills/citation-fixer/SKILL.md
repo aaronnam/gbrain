@@ -9,6 +9,7 @@ description: |
 triggers:
   - "fix citations"
   - "fix broken citations"
+  - "broken citations"
   - "citation audit"
   - "check citations"
   - "citation fixer"
