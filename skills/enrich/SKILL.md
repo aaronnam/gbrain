@@ -55,9 +55,11 @@ they building, what makes them tick, where are they headed.
 
 ## Citation Requirements (MANDATORY)
 
-> **Convention:** see `skills/conventions/quality.md` for citation formats and source precedence.
+Follow the shared citation/back-link rules in `skills/conventions/quality.md` instead of redefining them here.
 
-When sources conflict, note the contradiction with both citations.
+- Use the standard inline `[Source: ...]` citation shapes documented there.
+- Preserve the same source precedence (user statements > compiled truth > timeline > external).
+- When sources conflict, note the contradiction with both citations.
 
 ## When To Enrich
 
@@ -95,7 +97,7 @@ Extract people, companies, concepts from the incoming signal.
 For each entity:
 - `gbrain search "name"` -- does a page already exist?
 - **If yes:** UPDATE path (add new signal, update compiled truth if material)
-- **If no:** CREATE path (check notability gate first, then create)
+- **If no:** CREATE path (check `skills/_brain-filing-rules.md` notability gate first, then create)
 
 ### Step 3: Extract signal from source
 
