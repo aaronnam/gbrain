@@ -97,7 +97,7 @@ python3 "$HOME/.hermes/scripts/gbrain-upgrade-env-audit.py" --stable > "$HOME/gb
 
 The Hermes env audit is intentionally redacted: it records key names and present/empty/missing status only. Do not copy raw `~/.hermes/.env` into backup bundles.
 
-If DB-touching work is involved, also archive `~/.gbrain` after stopping active writers.
+If DB-touching work is involved, also archive `~/.gbrain` after stopping active writers. Check for foreground `gbrain serve` processes before running DB verification; Claude/cmux sessions can leave `bun /Users/aaron.nam/.bun/bin/gbrain serve` holding the PGLite lock. Stop only the GBrain writer, then remove `.gbrain-lock/lock` only after verifying the recorded PID is no longer alive.
 
 If `git apply --check` fails, inspect whether upstream removed or renamed a locally added path before assuming a content conflict. Example: during the v0.22.4-local → v0.23.0 probe, Aaron's local `skills/local-patch-governance/SKILL.md` existed only on the local branch and `origin/master` no longer had that path, so `git apply --check` failed with `No such file or directory`. Treat that as a port/delete decision: preserve the governance content in the correct current location if still useful, or keep it in Hermes/shared skills, rather than forcing an obsolete path back into upstream.
 
@@ -133,6 +133,7 @@ git rebase origin/master
 bun install
 bun link
 gbrain init
+gbrain config set sync.repo_path /Users/aaron.nam/Desktop/Repos/obsidian-aaron
 gbrain post-upgrade
 gbrain apply-migrations --yes
 python3 "$HOME/.hermes/scripts/gbrain-upgrade-env-audit.py" --stable > "$HOME/gbrain-upgrade-backups/$TS/hermes-env-after.json"
@@ -146,11 +147,12 @@ Resolve conflicts by preserving both upstream product changes and Aaron-specific
 Minimum checks:
 
 ```bash
-bun test test/lint.test.ts test/orphans.test.ts test/frontmatter-cli.test.ts test/migrations-v0_22_4.test.ts test/doctor.test.ts
+bun test test/lint.test.ts test/orphans.test.ts test/frontmatter-cli.test.ts test/doctor.test.ts test/dream-cli-flags.test.ts test/cycle-synthesize.test.ts test/cycle-patterns.test.ts
 bun run typecheck
 gbrain check-resolvable --skills-dir /Users/aaron.nam/gbrain/skills --json
 gbrain doctor --json
 gbrain stats
+gbrain dream --dry-run --json
 python3 ~/.hermes/scripts/gbrain-check-update.py
 ```
 
