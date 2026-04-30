@@ -92,9 +92,14 @@ TS=$(date +%Y%m%d-%H%M%S)
 mkdir -p "$HOME/gbrain-upgrade-backups/$TS"
 git diff > "$HOME/gbrain-upgrade-backups/$TS/local-gbrain-diff.patch"
 git status --short --branch > "$HOME/gbrain-upgrade-backups/$TS/git-status.txt"
+python3 "$HOME/.hermes/scripts/gbrain-upgrade-env-audit.py" --stable > "$HOME/gbrain-upgrade-backups/$TS/hermes-env-before.json"
 ```
 
+The Hermes env audit is intentionally redacted: it records key names and present/empty/missing status only. Do not copy raw `~/.hermes/.env` into backup bundles.
+
 If DB-touching work is involved, also archive `~/.gbrain` after stopping active writers.
+
+If `git apply --check` fails, inspect whether upstream removed or renamed a locally added path before assuming a content conflict. Example: during the v0.22.4-local → v0.23.0 probe, Aaron's local `skills/local-patch-governance/SKILL.md` existed only on the local branch and `origin/master` no longer had that path, so `git apply --check` failed with `No such file or directory`. Treat that as a port/delete decision: preserve the governance content in the correct current location if still useful, or keep it in Hermes/shared skills, rather than forcing an obsolete path back into upstream.
 
 ### 3. Convert real local changes into commits
 
@@ -130,6 +135,8 @@ bun link
 gbrain init
 gbrain post-upgrade
 gbrain apply-migrations --yes
+python3 "$HOME/.hermes/scripts/gbrain-upgrade-env-audit.py" --stable > "$HOME/gbrain-upgrade-backups/$TS/hermes-env-after.json"
+diff -u "$HOME/gbrain-upgrade-backups/$TS/hermes-env-before.json" "$HOME/gbrain-upgrade-backups/$TS/hermes-env-after.json" || true
 ```
 
 Resolve conflicts by preserving both upstream product changes and Aaron-specific behavior when compatible. Do not `git reset --hard origin/master` unless Aaron explicitly asks to discard local patches.
