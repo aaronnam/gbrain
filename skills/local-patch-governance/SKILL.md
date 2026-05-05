@@ -48,14 +48,14 @@ aaron   https://github.com/aaronnam/gbrain.git   # Aaron's durable local-patch f
 The working branch should normally be:
 
 ```bash
-aaron/v0.23.0-local
+aaron/v0.27.0-local
 ```
 
 This branch intentionally sits on top of upstream `origin/master` and carries small, reviewed commits for Aaron-specific behavior.
 
 ## Current Local Patch Categories
 
-As of v0.23.0, local commits are expected to cover:
+As of v0.27.0, local commits are expected to cover:
 
 1. **Skill/resolver behavior tuned for Aaron**
    - Resolver phrases such as `who is`, `notes on`, `do we already have notes on`, citation-fixer routing.
@@ -81,8 +81,8 @@ git remote -v
 ```
 
 Interpretation:
-- Clean `aaron/v0.23.0-local` ahead of `origin/master` by local commits = healthy.
-- Dirty working tree on `aaron/v0.23.0-local` = inspect; it may be an in-progress local patch, not an upgrade failure.
+- Clean `aaron/v0.27.0-local` ahead of `origin/master` by local commits = healthy.
+- Dirty working tree on `aaron/v0.27.0-local` = inspect; it may be an in-progress local patch, not an upgrade failure.
 - Dirty working tree on `master` = convert to a branch before further upgrades.
 
 ### 2. Preserve any new dirtiness before changing it
@@ -106,7 +106,7 @@ If `git apply --check` fails, inspect whether upstream removed or renamed a loca
 If changes are intentional:
 
 ```bash
-git switch aaron/v0.23.0-local 2>/dev/null || git switch -c aaron/v0.23.0-local
+git switch aaron/v0.27.0-local 2>/dev/null || git switch -c aaron/v0.27.0-local
 git add <coherent file group>
 git commit -m "<category>: <short purpose>"
 ```
@@ -119,7 +119,7 @@ Prefer small coherent commits:
 ### 4. Push to Aaron's fork
 
 ```bash
-git push -u aaron aaron/v0.23.0-local
+git push -u aaron aaron/v0.27.0-local
 ```
 
 This makes the local patch stack disaster-recoverable and removes reliance on stashes or backup patches.
@@ -185,7 +185,7 @@ Next action: <rebase | commit | upstream PR | no action>
 Classify each local patch:
 
 - **Generic product improvement:** open an upstream PR against `garrytan/gbrain`.
-- **Aaron-specific operational preference:** keep it on `aaron/v0.23.0-local`.
+- **Aaron-specific operational preference:** keep it on `aaron/v0.27.0-local`.
 - **Hermes-specific behavior:** move it to Hermes skills/config instead of GBrain core.
 
 When unsure, preserve locally first, then propose upstream after tests and a concise rationale.

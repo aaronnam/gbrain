@@ -28,7 +28,7 @@ start here.
 
 ## Aaron's local patch branch (do not misdiagnose as breakage)
 
-Aaron's canonical install may intentionally run on `aaron/v0.23.0-local`, not raw
+Aaron's canonical install may intentionally run on `aaron/v0.27.0-local`, not raw
 `origin/master`. `origin` is upstream `garrytan/gbrain`; `aaron` is Aaron's fork
 `aaronnam/gbrain` for durable local operational patches. Local commits currently
 preserve Aaron-specific skill routing plus lint/orphan reporting behavior.
@@ -46,8 +46,8 @@ git log --oneline --decorate -5
 git remote -v
 ```
 
-Expected healthy state: clean `aaron/v0.23.0-local` with local commits on top of
-`origin/master`, pushed to the `aaron` remote as branch `aaron/v0.23.0-local`. Future upgrades should use
+Expected healthy state: clean `aaron/v0.27.0-local` with local commits on top of
+`origin/master`, pushed to the `aaron` remote as branch `aaron/v0.27.0-local`. Future upgrades should use
 `git fetch origin master && git rebase origin/master`, then `bun install`, `bun link`,
 `gbrain init`, `gbrain post-upgrade`, `gbrain apply-migrations --yes`, and the focused
 verification suite. Use `git reset --hard origin/master` only if Aaron explicitly asks
