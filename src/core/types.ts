@@ -50,6 +50,7 @@ export function assertNever(x: never): never {
 export interface Page {
   id: number;
   slug: string;
+  source_id?: string;
   type: PageType;
   title: string;
   compiled_truth: string;
@@ -300,6 +301,7 @@ export interface Chunk {
  */
 export interface StaleChunkRow {
   slug: string;
+  source_id: string;
   chunk_index: number;
   chunk_text: string;
   chunk_source: 'compiled_truth' | 'timeline';

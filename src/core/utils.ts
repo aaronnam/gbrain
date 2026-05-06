@@ -61,6 +61,7 @@ export function rowToPage(row: Record<string, unknown>): Page {
   return {
     id: row.id as number,
     slug: row.slug as string,
+    source_id: row.source_id as string | undefined,
     type: row.type as PageType,
     title: row.title as string,
     compiled_truth: row.compiled_truth as string,
