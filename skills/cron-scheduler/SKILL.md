@@ -53,10 +53,34 @@ Every cron job MUST be idempotent:
 
 Job configuration saved. Report: "Job '{name}' scheduled at {cron expression}. Next run: {time}."
 
+## Cron notification UX
+
+For `no_agent` jobs or wrapper scripts that deliver directly to Aaron, do not print raw JSON on routine success. Emit a compact, human-first digest:
+- Status first: success/warning/failure.
+- What changed: 3-5 key counts or sources.
+- Action: `none` unless Aaron actually needs to do something.
+- Hide paths unless they are needed to inspect or roll back.
+- Preserve silence on no-change success when the wrapper already supports it.
+
+Example:
+```text
+✅ GBrain repo/agent memory refreshed
+
+What changed:
+- Sources: agent-summaries, repo-intel
+- Updated: 14
+- Deleted stale generated pages: 12
+- Search embeddings: 2/2 done
+
+Action: none unless the deletion count looks unusual.
+```
+
 ## Anti-Patterns
 
 - Scheduling jobs at the same minute (:00 for everything)
 - Inline 3000-word prompts in cron jobs (use skill file references)
 - Running cron jobs without testing on 3-5 items first
+- Treating direct script smoke tests as proof that scheduled automation works; for important jobs, force the real path with `cronjob run <job_id>` + `hermes cron tick`, then read `~/.hermes/cron/output/<job_id>/...md`.
+- Assuming one cron covers multiple accounts or scopes without reading the cron prompt; account-isolated jobs often need separate schedules and artifacts.
 - Jobs that produce different output on re-run (not idempotent)
 - Sending notifications during quiet hours (save to held queue instead)

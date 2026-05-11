@@ -52,6 +52,14 @@ broken brain. See `skills/conventions/quality.md` for format.
 
 ## Phases
 
+### Phase 0.5: Preserve cross-agent user lessons
+
+When a session reveals durable lessons about Aaron's preferences, synthesis style, or agent-operating expectations, do not preserve them only in a narrow automation skill or in runtime memory. Prefer a layered write: concise memory only if injection is needed, a GBrain/vault prompt page for cross-agent retrieval, a pointer from any relevant implementation skill, and a changelog entry when Hermes/GBrain behavior changed. See `references/cross-agent-user-lessons.md` for the concrete pattern and verification checklist.
+
+### Phase 0.6: Audit GBrain automation cost before proposing provider swaps
+
+When Aaron asks about GBrain `dream` cost, Anthropic spend, or replacing Anthropic with Codex/OpenAI subscription-backed routes, inspect the implementation and live DB token ledgers before recommending a change. Use `subagent_messages` for full token accounting, including `tokens_cache_create`; `minion_jobs` rollups can miss cache-create detail. Treat provider migration as architecture work, not a config flip: preserve GBrain-side tool execution, slug allowlists, and the subagent tool ledger. See `references/dream-synthesis-cost-and-provider-audit.md` for the query pattern, pricing formula, and provider-neutral migration shape.
+
 ### Phase 1: Brain-First Lookup (MANDATORY)
 
 Before using ANY external API to research a person, company, or topic:

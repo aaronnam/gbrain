@@ -189,3 +189,12 @@ Classify each local patch:
 - **Hermes-specific behavior:** move it to Hermes skills/config instead of GBrain core.
 
 When unsure, preserve locally first, then propose upstream after tests and a concise rationale.
+
+### Dream/provider-routing patches
+
+Provider-neutral GBrain dream work is high-value but touches upgrade-sensitive core files. Treat it as product work, not a quick local hack:
+
+- Judge-only provider routing in `src/core/cycle/synthesize.ts` is a small, upstreamable first slice.
+- Full subagent provider-neutralization touches `src/core/minions/handlers/subagent.ts`, tool-call replay, token accounting, and rate leases; expect medium rebase-conflict risk.
+- Keep any implementation in small named commits with focused tests and push to Aaron's fork before upgrading.
+- Prefer an upstream PR if the patch generalizes. See Hermes `gbrain-setup` reference `references/gbrain-dream-provider-routing.md` for the current assessment.
