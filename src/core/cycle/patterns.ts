@@ -224,19 +224,35 @@ async function collectChildPutPageSlugs(
   childIds: number[],
 ): Promise<string[]> {
   if (childIds.length === 0) return [];
-  // Handle both properly-stored jsonb objects (input->>'slug') and
-  // double-encoded jsonb strings from pre-fix data ((input #>> '{}')::jsonb->>'slug').
-  const rows = await engine.executeRaw<{ slug: string }>(
-    `SELECT DISTINCT
-            COALESCE(input->>'slug', (input #>> '{}')::jsonb->>'slug') AS slug
+  const rows = await engine.executeRaw<{ input: unknown }>(
+    `SELECT input
        FROM subagent_tool_executions
       WHERE job_id = ANY($1::int[])
         AND tool_name = 'brain_put_page'
         AND status = 'complete'
-      ORDER BY 1`,
+      ORDER BY id`,
     [childIds],
   );
-  return rows.map(r => r.slug).filter((s): s is string => typeof s === 'string' && s.length > 0);
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const slug = extractPutPageSlugFromToolInput(row.input);
+    if (slug) seen.add(slug);
+  }
+  return Array.from(seen).sort();
+}
+
+export function extractPutPageSlugFromToolInput(input: unknown): string | null {
+  let value: unknown = input;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== 'object') return null;
+  const slug = (value as { slug?: unknown }).slug;
+  return typeof slug === 'string' && slug.length > 0 ? slug : null;
 }
 
 // ── Reverse-write ────────────────────────────────────────────────────

@@ -302,7 +302,7 @@ export async function runPhaseSynthesize(
         verdicts.push({ filePath: t.filePath, worth: false, reasons: ['no ANTHROPIC_API_KEY for significance judge'], cached: false });
         continue;
       }
-      const verdict = await judgeSignificance(haiku, t, config.verdictModel);
+      const verdict = await judgeSignificance(haiku, t, config.verdictModel, config.prioritiesText);
       await engine.putDreamVerdict(t.filePath, t.contentHash, verdict);
       verdicts.push({ filePath: t.filePath, worth: verdict.worth_processing, reasons: verdict.reasons, cached: false });
       if (verdict.worth_processing) worthProcessing.push(t);
@@ -388,7 +388,7 @@ export async function runPhaseSynthesize(
       const isChunked = chunks.length > 1;
       for (let i = 0; i < chunks.length; i++) {
         const childData: SubagentHandlerData = {
-          prompt: buildSynthesisPrompt(t, chunks[i], i, chunks.length),
+          prompt: buildSynthesisPrompt(t, chunks[i], i, chunks.length, config.prioritiesText),
           model: config.model,
           max_turns: 30,
           allowed_slug_prefixes: allowedSlugPrefixes,
@@ -517,6 +517,8 @@ interface SynthConfig {
    * `dream.synthesize.max_chunks_per_transcript`.
    */
   maxChunksPerTranscript: number;
+  prioritiesPath: string | null;
+  prioritiesText: string;
 }
 
 async function loadSynthConfig(engine: BrainEngine): Promise<SynthConfig> {
@@ -545,6 +547,8 @@ async function loadSynthConfig(engine: BrainEngine): Promise<SynthConfig> {
   const cooldownHoursStr = await engine.getConfig('dream.synthesize.cooldown_hours');
   const maxPromptTokensStr = await engine.getConfig('dream.synthesize.max_prompt_tokens');
   const maxChunksStr = await engine.getConfig('dream.synthesize.max_chunks_per_transcript');
+  const prioritiesPath = await engine.getConfig('dream.synthesize.priorities_path');
+  const prioritiesText = loadPrioritiesText(prioritiesPath);
 
   let excludePatterns: string[] = ['medical', 'therapy'];
   if (excludeStr) {
@@ -582,7 +586,21 @@ async function loadSynthConfig(engine: BrainEngine): Promise<SynthConfig> {
     cooldownHours: cooldownHoursStr ? Math.max(0, parseInt(cooldownHoursStr, 10) || 12) : 12,
     maxPromptTokens,
     maxChunksPerTranscript,
+    prioritiesPath: prioritiesPath ?? null,
+    prioritiesText,
   };
+}
+
+export function loadPrioritiesText(prioritiesPath: string | null | undefined): string {
+  if (!prioritiesPath) return '';
+  try {
+    if (!existsSync(prioritiesPath)) return '';
+    const raw = readFileSync(prioritiesPath, 'utf8');
+    // Keep the prompt useful but bounded. This is steering context, not source material.
+    return raw.length > 8000 ? raw.slice(0, 8000) : raw;
+  } catch {
+    return '';
+  }
 }
 
 async function checkCooldown(
@@ -643,6 +661,7 @@ export async function judgeSignificance(
   client: JudgeClient,
   t: DiscoveredTranscript,
   verdictModel = 'claude-haiku-4-5-20251001',
+  prioritiesText = '',
 ): Promise<VerdictResult> {
   // Truncate the transcript at 8K chars for cost control. Haiku's verdict
   // doesn't need the full body; the opening + closing sections are usually
@@ -665,7 +684,7 @@ NOT WORTH PROCESSING (return worth_processing=false):
 - Short message exchanges with no original thought
 - Repetitive content the brain already has
 
-Respond as JSON: {"worth_processing": <bool>, "reasons": ["<short>", "<short>"]}.
+${prioritiesText.trim() ? `AARON DREAM PRIORITIES\n${prioritiesText.trim()}\n\nUse these priorities as a tie-breaker. Favor explicit Jesus/Scripture/prayer/formation, family leadership, durable decisions/open loops, financial optimization/alpha, work/craft judgment, and original thinking. Do not process routine operations just because they are about GBrain/Hermes.\n\n` : ''}Respond as JSON: {"worth_processing": <bool>, "reasons": ["<short>", "<short>"]}.
 Two reasons max, one phrase each.`;
 
   const msg = await client.create({
@@ -709,6 +728,7 @@ function buildSynthesisPrompt(
   chunkText: string,
   chunkIdx: number,
   chunkTotal: number,
+  prioritiesText = '',
 ): string {
   const dateHint = t.inferredDate ?? today();
   const baseSlugSegment = sanitizeForSlug(t.basename) || `session-${dateHint}`;
@@ -717,17 +737,25 @@ function buildSynthesisPrompt(
     ? `${t.contentHash.slice(0, 6)}-c${chunkIdx}`
     : t.contentHash.slice(0, 6);
   const chunkBanner = isChunked
-    ? `\n- This is CHUNK ${chunkIdx + 1} of ${chunkTotal} from the same transcript. Different chunks process different sections; do not assume continuity with other chunks.`
+    ? `
+- This is CHUNK ${chunkIdx + 1} of ${chunkTotal} from the same transcript. Different chunks process different sections; do not assume continuity with other chunks.`
     : '';
   const transcriptHeader = isChunked
     ? `${t.filePath} (chunk ${chunkIdx + 1}/${chunkTotal})`
     : t.filePath;
+  const priorityBlock = prioritiesText.trim()
+    ? `
+AARON DREAM PRIORITIES
+${prioritiesText.trim()}
+`
+    : '';
   return `You are synthesizing a conversation transcript into the user's personal knowledge brain.
 
 CONTEXT
 - Today's date: ${dateHint}
 - Transcript hash suffix (USE THIS in slugs): ${hashSuffix}
 - Source file basename: ${baseSlugSegment}${chunkBanner}
+${priorityBlock}
 
 OUTPUT POLICY (ALL of these are required)
 1. Quote the user verbatim. Do not paraphrase memorable phrasings.
@@ -764,6 +792,20 @@ function sanitizeForSlug(s: string): string {
 
 // ── Slug collection from child put_page calls (codex #2 + D6) ────────
 
+export function extractPutPageSlugFromToolInput(input: unknown): string | null {
+  let value: unknown = input;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== 'object') return null;
+  const slug = (value as { slug?: unknown }).slug;
+  return typeof slug === 'string' && slug.length > 0 ? slug : null;
+}
+
 /**
  * D6 (orchestrator-side deterministic slug rewrite, zero Sonnet trust):
  * two-stage path — raw fetch (no DISTINCT, preserves duplicate evidence) →
@@ -783,24 +825,21 @@ async function collectChildPutPageSlugs(
   chunkInfo: Map<number, { idx: number; hash6: string }>,
 ): Promise<string[]> {
   if (childIds.length === 0) return [];
-  // Raw fetch — NO SELECT DISTINCT. Preserves per-child slug duplicates so
-  // the orchestrator sees what each child wrote. COALESCE handles both
-  // properly-stored jsonb objects (input->>'slug') and double-encoded jsonb
-  // strings from pre-fix data ((input #>> '{}')::jsonb->>'slug').
-  const rows = await engine.executeRaw<{ job_id: number; slug: string }>(
-    `SELECT job_id,
-            COALESCE(input->>'slug', (input #>> '{}')::jsonb->>'slug') AS slug
+  const rows = await engine.executeRaw<{ job_id: number; input: unknown }>(
+    `SELECT job_id, input
        FROM subagent_tool_executions
       WHERE job_id = ANY($1::int[])
         AND tool_name = 'brain_put_page'
-        AND status = 'complete'`,
+        AND status = 'complete'
+      ORDER BY id`,
     [childIds],
   );
   const rewritten = new Set<string>();
   for (const r of rows) {
-    if (typeof r.slug !== 'string' || r.slug.length === 0) continue;
+    const slug = extractPutPageSlugFromToolInput(r.input);
+    if (!slug) continue;
     const ci = chunkInfo.get(r.job_id);
-    rewritten.add(ci ? rewriteChunkedSlug(r.slug, ci.hash6, ci.idx) : r.slug);
+    rewritten.add(ci ? rewriteChunkedSlug(slug, ci.hash6, ci.idx) : slug);
   }
   return Array.from(rewritten).sort();
 }
