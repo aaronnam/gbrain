@@ -18,7 +18,7 @@ import {
   isDreamOutput,
   DREAM_OUTPUT_MARKER_RE,
 } from '../src/core/cycle/transcript-discovery.ts';
-import { judgeSignificance, renderPageToMarkdown, type JudgeClient } from '../src/core/cycle/synthesize.ts';
+import { judgeSignificance, renderPageToMarkdown, extractPutPageSlugFromToolInput, loadPrioritiesText, type JudgeClient } from '../src/core/cycle/synthesize.ts';
 
 let tmpDir: string;
 
@@ -294,6 +294,21 @@ describe('self-consumption guard (v0.23.2 marker-based)', () => {
   });
 });
 
+describe('dream put_page slug extraction', () => {
+  test('extracts slug from object and JSON-string tool inputs', () => {
+    expect(extractPutPageSlugFromToolInput({ slug: 'wiki/personal/reflections/object-slug' }))
+      .toBe('wiki/personal/reflections/object-slug');
+    expect(extractPutPageSlugFromToolInput('{"slug":"wiki/originals/ideas/string-slug","title":"x"}'))
+      .toBe('wiki/originals/ideas/string-slug');
+  });
+
+  test('returns null for malformed or missing slug inputs', () => {
+    expect(extractPutPageSlugFromToolInput('{bad json')).toBeNull();
+    expect(extractPutPageSlugFromToolInput({ title: 'missing' })).toBeNull();
+    expect(extractPutPageSlugFromToolInput(null)).toBeNull();
+  });
+});
+
 describe('judgeSignificance', () => {
   function makeTranscript(): import('../src/core/cycle/transcript-discovery.ts').DiscoveredTranscript {
     return {
@@ -305,10 +320,11 @@ describe('judgeSignificance', () => {
     };
   }
 
-  function mockClient(captured: { model?: string }): JudgeClient {
+  function mockClient(captured: { model?: string; system?: string }): JudgeClient {
     return {
       create: async (p: any) => {
         captured.model = p.model;
+        captured.system = p.system;
         return { content: [{ type: 'text', text: '{"worth_processing": true, "reasons": ["test"]}' }] } as any;
       },
     };
@@ -324,6 +340,20 @@ describe('judgeSignificance', () => {
     const captured: { model?: string } = {};
     await judgeSignificance(mockClient(captured), makeTranscript());
     expect(captured.model).toBe('claude-haiku-4-5-20251001');
+  });
+
+  test('injects dream priorities into significance judge when provided', async () => {
+    const captured: { model?: string; system?: string } = {};
+    await judgeSignificance(mockClient(captured), makeTranscript(), 'claude-haiku-4-5-20251001', 'Family leadership priority');
+    expect(captured.system).toContain('AARON DREAM PRIORITIES');
+    expect(captured.system).toContain('Family leadership priority');
+  });
+
+  test('loadPrioritiesText returns bounded file content and tolerates missing file', () => {
+    const p = join(tmpDir, 'priorities.md');
+    writeFileSync(p, 'x'.repeat(9000), 'utf8');
+    expect(loadPrioritiesText(p)).toHaveLength(8000);
+    expect(loadPrioritiesText(join(tmpDir, 'missing.md'))).toBe('');
   });
 
   test('returns worth_processing=false when judge returns unparseable text', async () => {

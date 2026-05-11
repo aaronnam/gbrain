@@ -34,9 +34,11 @@ describe('patterns phase wiring', () => {
     expect(patternsSrc).toContain('dream.patterns.lookback_days');
   });
 
-  test('uses subagent_tool_executions for slug provenance (Codex #2 fix)', () => {
-    expect(patternsSrc).toContain('subagent_tool_executions');
-    expect(patternsSrc).toContain("tool_name = 'brain_put_page'");
+  test('parses JSON-string put_page tool inputs before reverse-writing', () => {
+    expect(patternsSrc).toContain('extractPutPageSlugFromToolInput');
+    expect(patternsSrc).toContain('JSON.parse(value)');
+    expect(patternsSrc).toContain('SELECT input');
+    expect(patternsSrc).not.toContain("input->>'slug' AS slug");
   });
 
   test('skips when ANTHROPIC_API_KEY missing', () => {

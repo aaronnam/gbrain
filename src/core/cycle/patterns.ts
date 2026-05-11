@@ -228,23 +228,37 @@ async function collectChildPutPageSlugs(
   if (childIds.length === 0) return [];
   // v0.32.8: subagent put_page tool schema doesn't expose source_id (subagents
   // are scoped to a single source). Default to 'default' here; multi-source
-  // dream cycles are a v0.33 follow-up. The point of threading source_id is
-  // so reverseWriteRefs can pass it through getPage and pick the correct
-  // (source_id, slug) row instead of whatever the DB happens to return.
-  const rows = await engine.executeRaw<{ slug: string }>(
-    `SELECT DISTINCT
-            COALESCE(input->>'slug', (input #>> '{}')::jsonb->>'slug') AS slug
+  // dream cycles are a follow-up. Reading `input` and parsing in TypeScript
+  // handles both object-shaped tool inputs and JSON-string tool inputs.
+  const rows = await engine.executeRaw<{ input: unknown }>(
+    `SELECT input
        FROM subagent_tool_executions
       WHERE job_id = ANY($1::int[])
         AND tool_name = 'brain_put_page'
         AND status = 'complete'
-      ORDER BY 1`,
+      ORDER BY id`,
     [childIds],
   );
-  return rows
-    .map(r => r.slug)
-    .filter((s): s is string => typeof s === 'string' && s.length > 0)
-    .map(slug => ({ slug, source_id: 'default' }));
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const slug = extractPutPageSlugFromToolInput(row.input);
+    if (slug) seen.add(slug);
+  }
+  return Array.from(seen).sort().map(slug => ({ slug, source_id: 'default' }));
+}
+
+export function extractPutPageSlugFromToolInput(input: unknown): string | null {
+  let value: unknown = input;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== 'object') return null;
+  const slug = (value as { slug?: unknown }).slug;
+  return typeof slug === 'string' && slug.length > 0 ? slug : null;
 }
 
 // ── Reverse-write ────────────────────────────────────────────────────
