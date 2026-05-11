@@ -126,6 +126,10 @@ export async function runMigrateEngine(sourceEngine: BrainEngine, args: string[]
     await targetEngine.executeRaw('DELETE FROM pages');
   }
 
+  // Multi-source brains need source rows before page copies, otherwise
+  // source-scoped pages either fail FK checks or collapse into default.
+  await copySources(sourceEngine, targetEngine);
+
   // Load or create manifest for resume
   let manifest = loadManifest();
   if (manifest && manifest.target_engine !== opts.targetEngine) {
@@ -144,7 +148,7 @@ export async function runMigrateEngine(sourceEngine: BrainEngine, args: string[]
   // Get all source pages
   const sourceStats = await sourceEngine.getStats();
   const allPages = await sourceEngine.listPages({ limit: 100000 });
-  const pagesToMigrate = allPages.filter(p => !completedSet.has(p.slug));
+  const pagesToMigrate = allPages.filter(p => !completedSet.has(`${p.source_id ?? 'default'}:${p.slug}`));
 
   console.log(`Migrating ${pagesToMigrate.length} pages (${allPages.length} total, ${completedSet.size} already done)...`);
 
@@ -153,9 +157,12 @@ export async function runMigrateEngine(sourceEngine: BrainEngine, args: string[]
 
   let migrated = 0;
   for (const page of pagesToMigrate) {
+    const sourceId = page.source_id ?? 'default';
     // Copy page
     await targetEngine.putPage(page.slug, {
       type: page.type,
+      sourceId: page.source_id,
+      page_kind: page.page_kind,
       title: page.title,
       compiled_truth: page.compiled_truth,
       timeline: page.timeline,
@@ -164,7 +171,7 @@ export async function runMigrateEngine(sourceEngine: BrainEngine, args: string[]
     });
 
     // Copy chunks with embeddings
-    const chunks = await sourceEngine.getChunksWithEmbeddings(page.slug);
+    const chunks = await sourceEngine.getChunksWithEmbeddings(page.slug, { sourceId });
     if (chunks.length > 0) {
       await targetEngine.upsertChunks(page.slug, chunks.map(c => ({
         chunk_index: c.chunk_index,
@@ -173,39 +180,17 @@ export async function runMigrateEngine(sourceEngine: BrainEngine, args: string[]
         embedding: c.embedding || undefined,
         model: c.model,
         token_count: c.token_count || undefined,
-      })));
+      })), { sourceId });
     }
 
     // Copy tags
-    const tags = await sourceEngine.getTags(page.slug);
+    const tags = await sourceEngine.getTags(page.slug, { sourceId });
     for (const tag of tags) {
-      await targetEngine.addTag(page.slug, tag);
+      await targetEngine.addTag(page.slug, tag, { sourceId });
     }
-
-    // Copy timeline
-    const timeline = await sourceEngine.getTimeline(page.slug);
-    for (const entry of timeline) {
-      await targetEngine.addTimelineEntry(page.slug, {
-        date: entry.date,
-        source: entry.source,
-        summary: entry.summary,
-        detail: entry.detail,
-      });
-    }
-
-    // Copy raw data
-    const rawData = await sourceEngine.getRawData(page.slug);
-    for (const rd of rawData) {
-      await targetEngine.putRawData(page.slug, rd.source, rd.data);
-    }
-
-    // Copy versions
-    const versions = await sourceEngine.getVersions(page.slug);
-    // Versions are snapshots, we recreate them on the target
-    // (createVersion takes a snapshot of current state, which we just set)
 
     // Track progress
-    manifest!.completed_slugs.push(page.slug);
+    manifest!.completed_slugs.push(`${page.source_id ?? 'default'}:${page.slug}`);
     saveManifest(manifest!);
     migrated++;
     progress.tick(1, page.slug);
@@ -223,6 +208,11 @@ export async function runMigrateEngine(sourceEngine: BrainEngine, args: string[]
     progress.tick(1);
   }
   progress.finish();
+
+  await copyTimelineEntries(sourceEngine, targetEngine);
+  await copyRawData(sourceEngine, targetEngine);
+  await copyPageVersions(sourceEngine, targetEngine);
+  await copyIngestLog(sourceEngine, targetEngine);
 
   // Copy config (selective)
   const configKeys = ['embedding_model', 'embedding_dimensions', 'chunk_strategy'];
@@ -261,6 +251,134 @@ export async function runMigrateEngine(sourceEngine: BrainEngine, args: string[]
   }
 
   await targetEngine.disconnect();
+}
+
+
+async function copySources(sourceEngine: BrainEngine, targetEngine: BrainEngine): Promise<void> {
+  const sources = await sourceEngine.executeRaw<Record<string, unknown>>(
+    `SELECT id, name, local_path, last_commit, last_sync_at, config, chunker_version,
+            archived, archived_at, archive_expires_at, created_at
+       FROM sources
+      ORDER BY id`,
+  );
+  for (const s of sources) {
+    await targetEngine.executeRaw(
+      `INSERT INTO sources (id, name, local_path, last_commit, last_sync_at, config, chunker_version,
+                            archived, archived_at, archive_expires_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, COALESCE($8::boolean, false), $9, $10, COALESCE($11::timestamptz, now()))
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         local_path = EXCLUDED.local_path,
+         last_commit = EXCLUDED.last_commit,
+         last_sync_at = EXCLUDED.last_sync_at,
+         config = EXCLUDED.config,
+         chunker_version = EXCLUDED.chunker_version,
+         archived = EXCLUDED.archived,
+         archived_at = EXCLUDED.archived_at,
+         archive_expires_at = EXCLUDED.archive_expires_at`,
+      [
+        s.id,
+        s.name,
+        s.local_path ?? null,
+        s.last_commit ?? null,
+        s.last_sync_at ?? null,
+        JSON.stringify(s.config ?? {}),
+        s.chunker_version ?? null,
+        s.archived ?? false,
+        s.archived_at ?? null,
+        s.archive_expires_at ?? null,
+        s.created_at ?? null,
+      ],
+    );
+  }
+}
+
+async function copyPageVersions(sourceEngine: BrainEngine, targetEngine: BrainEngine): Promise<void> {
+  const versions = await sourceEngine.executeRaw<Record<string, unknown>>(
+    `SELECT p.source_id, p.slug, pv.compiled_truth, pv.frontmatter, pv.snapshot_at
+       FROM page_versions pv
+       JOIN pages p ON p.id = pv.page_id
+      ORDER BY p.source_id, p.slug, pv.snapshot_at`,
+  );
+  if (versions.length === 0) return;
+  await targetEngine.executeRaw(`DELETE FROM page_versions`);
+  for (const v of versions) {
+    await targetEngine.executeRaw(
+      `INSERT INTO page_versions (page_id, compiled_truth, frontmatter, snapshot_at)
+       SELECT id, $3, $4::jsonb, $5::timestamptz
+         FROM pages
+        WHERE source_id = $1 AND slug = $2`,
+      [v.source_id ?? 'default', v.slug, v.compiled_truth ?? '', JSON.stringify(v.frontmatter ?? {}), v.snapshot_at],
+    );
+  }
+}
+
+
+async function copyTimelineEntries(sourceEngine: BrainEngine, targetEngine: BrainEngine): Promise<void> {
+  const entries = await sourceEngine.executeRaw<Record<string, unknown>>(
+    `SELECT p.source_id, p.slug, te.date, te.source, te.summary, te.detail, te.created_at
+       FROM timeline_entries te
+       JOIN pages p ON p.id = te.page_id
+      ORDER BY p.source_id, p.slug, te.date, te.id`,
+  );
+  if (entries.length === 0) return;
+  await targetEngine.executeRaw(`DELETE FROM timeline_entries`);
+  for (const e of entries) {
+    await targetEngine.executeRaw(
+      `INSERT INTO timeline_entries (page_id, date, source, summary, detail, created_at)
+       SELECT id, $3::date, $4, $5, $6, COALESCE($7::timestamptz, now())
+         FROM pages
+        WHERE source_id = $1 AND slug = $2
+       ON CONFLICT (page_id, date, summary) DO NOTHING`,
+      [e.source_id ?? 'default', e.slug, e.date, e.source ?? '', e.summary ?? '', e.detail ?? '', e.created_at ?? null],
+    );
+  }
+}
+
+async function copyRawData(sourceEngine: BrainEngine, targetEngine: BrainEngine): Promise<void> {
+  const rows = await sourceEngine.executeRaw<Record<string, unknown>>(
+    `SELECT p.source_id, p.slug, rd.source, rd.data, rd.fetched_at
+       FROM raw_data rd
+       JOIN pages p ON p.id = rd.page_id
+      ORDER BY p.source_id, p.slug, rd.source`,
+  );
+  if (rows.length === 0) return;
+  await targetEngine.executeRaw(`DELETE FROM raw_data`);
+  for (const r of rows) {
+    await targetEngine.executeRaw(
+      `INSERT INTO raw_data (page_id, source, data, fetched_at)
+       SELECT id, $3, $4::jsonb, COALESCE($5::timestamptz, now())
+         FROM pages
+        WHERE source_id = $1 AND slug = $2
+       ON CONFLICT (page_id, source) DO UPDATE SET
+         data = EXCLUDED.data,
+         fetched_at = EXCLUDED.fetched_at`,
+      [r.source_id ?? 'default', r.slug, r.source, JSON.stringify(r.data ?? {}), r.fetched_at ?? null],
+    );
+  }
+}
+
+async function copyIngestLog(sourceEngine: BrainEngine, targetEngine: BrainEngine): Promise<void> {
+  const entries = await sourceEngine.executeRaw<Record<string, unknown>>(
+    `SELECT source_type, source_ref, pages_updated, summary, created_at
+       FROM ingest_log
+      ORDER BY created_at, id`,
+  );
+  if (entries.length === 0) return;
+  await targetEngine.executeRaw(`DELETE FROM ingest_log`);
+  for (const e of entries) {
+    await targetEngine.executeRaw(
+      `INSERT INTO ingest_log (source_type, source_ref, pages_updated, summary, created_at)
+       VALUES ($1, $2, $3::jsonb, $4, $5::timestamptz)`,
+      [
+        e.source_type,
+        e.source_ref,
+        JSON.stringify(e.pages_updated ?? []),
+        e.summary ?? '',
+        e.created_at,
+      ],
+    );
+  }
 }
 
 /**

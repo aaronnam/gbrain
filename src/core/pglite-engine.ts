@@ -2732,13 +2732,14 @@ export class PGLiteEngine implements BrainEngine {
     await this.db.exec(sql);
   }
 
-  async getChunksWithEmbeddings(slug: string): Promise<Chunk[]> {
+  async getChunksWithEmbeddings(slug: string, opts?: { sourceId?: string }): Promise<Chunk[]> {
+    const sourceId = opts?.sourceId ?? 'default';
     const { rows } = await this.db.query(
       `SELECT cc.* FROM content_chunks cc
        JOIN pages p ON p.id = cc.page_id
-       WHERE p.slug = $1
+       WHERE p.slug = $1 AND p.source_id = $2
        ORDER BY cc.chunk_index`,
-      [slug]
+      [slug, sourceId]
     );
     return (rows as Record<string, unknown>[]).map(r => rowToChunk(r, true));
   }

@@ -16,6 +16,22 @@ describe('migrate', () => {
     expect(typeof runMigrations).toBe('function');
   });
 
+  test('engine migration preserves source scope and operational history', () => {
+    const src = readFileSync(resolve(import.meta.dir, '../src/commands/migrate-engine.ts'), 'utf-8');
+    expect(src).toContain('copySources(sourceEngine, targetEngine)');
+    expect(src).toContain('sourceId: page.source_id');
+    expect(src).toContain('page_kind: page.page_kind');
+    expect(src).toContain('getChunksWithEmbeddings(page.slug, { sourceId })');
+    expect(src).toContain('upsertChunks(page.slug, chunks.map');
+    expect(src).toContain('{ sourceId });');
+    expect(src).toContain('copyTimelineEntries(sourceEngine, targetEngine)');
+    expect(src).toContain('copyRawData(sourceEngine, targetEngine)');
+    expect(src).toContain('copyPageVersions(sourceEngine, targetEngine)');
+    expect(src).toContain('copyIngestLog(sourceEngine, targetEngine)');
+    expect(src).toContain('DELETE FROM timeline_entries');
+    expect(src).toContain('DELETE FROM raw_data');
+  });
+
   // Integration tests for actual migration execution require DATABASE_URL
   // and are covered in the E2E suite (test/e2e/mechanical.test.ts)
 });

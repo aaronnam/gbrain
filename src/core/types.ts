@@ -52,6 +52,7 @@ export interface Page {
   slug: string;
   source_id?: string;
   type: PageType;
+  page_kind?: PageKind;
   title: string;
   compiled_truth: string;
   timeline: string;

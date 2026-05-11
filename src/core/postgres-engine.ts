@@ -2849,15 +2849,16 @@ export class PostgresEngine implements BrainEngine {
     await conn.unsafe(sqlStr);
   }
 
-  async getChunksWithEmbeddings(slug: string): Promise<Chunk[]> {
-    const conn = this.sql;
-    const rows = await conn`
+  async getChunksWithEmbeddings(slug: string, opts?: { sourceId?: string }): Promise<Chunk[]> {
+    const sql = this.sql;
+    const sourceId = opts?.sourceId ?? 'default';
+    const rows = await sql`
       SELECT cc.* FROM content_chunks cc
       JOIN pages p ON p.id = cc.page_id
-      WHERE p.slug = ${slug}
+      WHERE p.slug = ${slug} AND p.source_id = ${sourceId}
       ORDER BY cc.chunk_index
     `;
-    return rows.map((r) => rowToChunk(r as Record<string, unknown>, true));
+    return rows.map(r => rowToChunk(r, true));
   }
 
   /**

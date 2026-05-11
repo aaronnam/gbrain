@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'crypto';
-import type { Page, PageInput, PageType, Chunk, SearchResult } from './types.ts';
+import type { Page, PageInput, PageType, PageKind, Chunk, SearchResult } from './types.ts';
 import type { Take, TakeKind } from './engine.ts';
 
 /**
@@ -63,6 +63,7 @@ export function rowToPage(row: Record<string, unknown>): Page {
     slug: row.slug as string,
     source_id: row.source_id as string | undefined,
     type: row.type as PageType,
+    page_kind: row.page_kind as PageKind | undefined,
     title: row.title as string,
     compiled_truth: row.compiled_truth as string,
     timeline: row.timeline as string,
