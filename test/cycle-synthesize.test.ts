@@ -18,7 +18,7 @@ import {
   isDreamOutput,
   DREAM_OUTPUT_MARKER_RE,
 } from '../src/core/cycle/transcript-discovery.ts';
-import { judgeSignificance, renderPageToMarkdown, extractPutPageSlugFromToolInput, loadPrioritiesText, type JudgeClient } from '../src/core/cycle/synthesize.ts';
+import { judgeSignificance, renderPageToMarkdown, extractPutPageSlugFromToolInput, loadPrioritiesText, buildSynthesisPrompt, type JudgeClient } from '../src/core/cycle/synthesize.ts';
 
 let tmpDir: string;
 
@@ -363,5 +363,25 @@ describe('judgeSignificance', () => {
     const r = await judgeSignificance(client, makeTranscript());
     expect(r.worth_processing).toBe(false);
     expect(r.reasons[0]).toContain('unparseable');
+  });
+});
+
+describe('buildSynthesisPrompt', () => {
+  test('separates existing-page link exactness from new-page slug discipline', () => {
+    const t = {
+      filePath: '/tmp/2026-05-11-example.md',
+      basename: '2026-05-11-example',
+      content: 'Transcript body',
+      charCount: 15,
+      contentHash: 'abcdef123456',
+      inferredDate: '2026-05-11',
+    } as any;
+
+    const prompt = buildSynthesisPrompt(t, 'Transcript body', 0, 1);
+
+    expect(prompt).toContain('copy its returned slug EXACTLY, including case, underscores, and path prefix');
+    expect(prompt).toContain('do not normalize existing-page links to the new-page slug rules');
+    expect(prompt).toContain('New-page slug discipline');
+    expect(prompt).toContain('This rule applies only to slugs you create, not to wikilinks pointing at existing pages');
   });
 });
