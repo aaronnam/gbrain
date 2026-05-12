@@ -169,6 +169,8 @@ JSON envelope (when `--json` is passed):
 
 ## Anti-Patterns
 
+**Don't treat recurring generated-page frontmatter fixes as an optimizer workload.** If the same generated folder keeps surfacing `missing_title`, `missing_created`, or `no_frontmatter`, patch the source generator/template so pages are valid at creation time. Verify by generating into a temporary directory and running `gbrain frontmatter validate <tmpdir> --json`; keep human-facing notifications clean by stripping frontmatter only at delivery/print time, not from stored markdown.
+
 **Don't auto-fix `MISSING_OPEN` or `EMPTY_FRONTMATTER` without user input.** These usually mean a human author started a page and didn't finish — silently inserting `---` markers around an unfinished draft is wrong.
 
 **Don't use `--fix` to "make doctor green" without reading the audit first.** SLUG_MISMATCH cases are surfaced for manual review specifically because gbrain derives the slug from path. A mismatch usually means the user renamed a file intentionally; auto-removing the slug field is the right outcome only when you've confirmed the rename was deliberate.
