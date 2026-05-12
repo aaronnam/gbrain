@@ -787,7 +787,7 @@ async function loadPriorContradictionsBlock(engine: BrainEngine): Promise<string
   }
 }
 
-function buildSynthesisPrompt(
+export function buildSynthesisPrompt(
   t: DiscoveredTranscript,
   chunkText: string,
   chunkIdx: number,
@@ -824,9 +824,9 @@ ${priorityBlock}
 
 OUTPUT POLICY (ALL of these are required)
 1. Quote the user verbatim. Do not paraphrase memorable phrasings.
-2. Cross-reference compulsively: every new page MUST contain at least one wikilink (e.g., \`[ref](people/jane-doe)\` or \`[[people/jane-doe]]\`) to existing brain content. Use the search tool to find existing pages first.
+2. Cross-reference compulsively: every new page MUST contain at least one wikilink (e.g., \`[ref](people/jane-doe)\` or \`[[people/jane-doe]]\`) to existing brain content. Use the search tool to find existing pages first. When linking an existing page, copy its returned slug EXACTLY, including case, underscores, and path prefix; do not normalize existing-page links to the new-page slug rules.
 3. Do NOT write to any path outside the allow-list shown in the put_page schema.
-4. Slug discipline: lowercase alphanumeric and hyphens only, slash-separated segments. NO underscores, NO file extensions.
+4. New-page slug discipline: lowercase alphanumeric and hyphens only, slash-separated segments. NO underscores, NO file extensions. This rule applies only to slugs you create, not to wikilinks pointing at existing pages.
 
 TASKS
 A. Reflections (self-knowledge, pattern recognition, emotional processing):
